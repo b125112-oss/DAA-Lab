@@ -2,94 +2,88 @@
 #include <stdlib.h>
 #include <time.h>
 
-// Function to simulate a perfectly fair coin toss (50/50 chance)
-int flip_fair_coin() {
+// Helper function for a Fair Coin toss
+int tossFair() {
     return rand() % 2; 
 }
 
-// Function to simulate a coin toss with a specific weight/bias
-int flip_weighted_coin(double probability_of_heads) {
-    double random_val = (double)rand() / RAND_MAX;
-    return (random_val < probability_of_heads) ? 1 : 0;
+// Helper function for a Biased Coin toss
+int tossBiased(double bias) {
+    double r = (double)rand() / RAND_MAX;
+    return (r < bias) ? 1 : 0;
 }
 
 int main() {
-    // Initialize random seed based on current system time
+    // Seed the random number generator
     srand((unsigned int)time(NULL));
 
-    int total_flips = 5000; 
-    double target_bias = 0.75; // 75% chance of getting Heads
+    int max_tosses = 5000; // Total number of tosses for the simulation
+    double bias_prob = 0.75; // 75% chance of Heads for the biased coin
     
-    int fair_heads_total = 0;
-    int weighted_heads_total = 0;
+    int fair_heads = 0;
+    int biased_heads = 0;
 
-    // Arrays to log the running probability over time
-    // Sized to total_flips + 1 to keep index matching the 1-based flip count
-    double fair_prob_tracker[total_flips + 1];
-    double weighted_prob_tracker[total_flips + 1];
+    // Arrays to store cumulative probability values for plotting
+    // Sized to max_tosses + 1 to avoid out-of-bounds errors
+    double fair_probs[max_tosses + 1];
+    double biased_probs[max_tosses + 1];
 
-    // Run the coin toss simulation
-    for (int flip = 1; flip <= total_flips; flip++) {
-        fair_heads_total += flip_fair_coin();
-        weighted_heads_total += flip_weighted_coin(target_bias);
+    // Simulation loop
+    for (int i = 1; i <= max_tosses; i++) {
+        fair_heads += tossFair();
+        biased_heads += tossBiased(bias_prob);
         
-        // Track the running average (experimental probability)
-        fair_prob_tracker[flip] = (double)fair_heads_total / flip;
-        weighted_prob_tracker[flip] = (double)weighted_heads_total / flip;
+        // Calculate the cumulative probability of Heads up to the i-th toss
+        fair_probs[i] = (double)fair_heads / i;
+        biased_probs[i] = (double)biased_heads / i;
     }
 
-    // Print final analytical results to the console
-    printf("--- Simulation Results (%d flips) ---\n", total_flips);
-    printf("Theoretical Fair Coin Probability:  0.500000\n");
-    printf("Experimental Fair Coin Probability: %f\n\n", fair_prob_tracker[total_flips]);
-    
-    printf("Theoretical Weighted Coin Prob:     %f\n", target_bias);
-    printf("Experimental Weighted Coin Prob:    %f\n", weighted_prob_tracker[total_flips]);
+    // Output final results to console to explicitly show the probabilities
+    printf("--- Simulation Complete (%d tosses) ---\n", max_tosses);
+    printf("Expected Fair Coin Probability:   0.500000\n");
+    printf("Calculated Fair Coin Probability: %f\n\n", fair_probs[max_tosses]);
+    printf("Expected Biased Coin Probability: %f\n", bias_prob);
+    printf("Calculated Biased Coin Prob:      %f\n", biased_probs[max_tosses]);
 
-    // --- Gnuplot Rendering ---
-    FILE *plot_pipe = popen("gnuplot -persistent", "w");
-    if (plot_pipe == NULL) {
-        printf("Error: Failed to open Gnuplot pipe. Ensure Gnuplot is installed.\n");
+    // --- Visualization using Gnuplot ---
+    FILE *gnuplot = popen("gnuplot -persistent", "w");
+    if (gnuplot == NULL) {
+        printf("Error: Could not open Gnuplot.\n");
         return 1;
     }
 
-    // Configure graphics terminal, fonts, and output dimensions
-    fprintf(plot_pipe, "set terminal pngcairo enhanced font 'Arial,11' size 800,600\n");
-    fprintf(plot_pipe, "set output 'law_of_large_numbers_plot.png'\n");
+    // Graph setup
+    fprintf(gnuplot, "set terminal pngcairo enhanced font 'arial,10' size 800,600\n");
+    fprintf(gnuplot, "set output 'coin_toss.png'\n");
+    fprintf(gnuplot, "set title 'Law of Large Numbers: Fair vs Biased Coin'\n");
+    fprintf(gnuplot, "set xlabel 'Number of Tosses'\n");
+    fprintf(gnuplot, "set ylabel 'Cumulative Probability of Heads'\n");
+    fprintf(gnuplot, "set yrange [0:1]\n");
+    fprintf(gnuplot, "set key right bottom\n"); // Move legend so it doesn't block data
     
-    // Label axes and title
-    fprintf(plot_pipe, "set title 'Law of Large Numbers: Fair vs Weighted Coin'\n");
-    fprintf(plot_pipe, "set xlabel 'Total Tosses'\n");
-    fprintf(plot_pipe, "set ylabel 'Running Probability of Heads'\n");
-    fprintf(plot_pipe, "set yrange [0:1]\n");
+    // Add horizontal reference lines at Expected Probabilities (0.5 and 0.75)
+    fprintf(gnuplot, "set arrow from 0,0.5 to %d,0.5 nohead lc rgb 'black' dashtype 2\n", max_tosses);
+    fprintf(gnuplot, "set arrow from 0,0.75 to %d,0.75 nohead lc rgb 'black' dashtype 2\n", max_tosses);
     
-    // Move legend to the bottom right and frame it with a box
-    fprintf(plot_pipe, "set key right bottom box\n"); 
-    
-    // Draw theoretical reference lines for easy visual comparison
-    fprintf(plot_pipe, "set arrow from 0,0.5 to %d,0.5 nohead lc rgb 'gray40' dashtype 2 lw 1.5\n", total_flips);
-    fprintf(plot_pipe, "set arrow from 0,0.75 to %d,0.75 nohead lc rgb 'gray40' dashtype 2 lw 1.5\n", total_flips);
-    
-    // Pass plotting instructions with adjusted line widths (lw 2) for better visibility
-    fprintf(plot_pipe, "plot '-' title 'Fair Coin (Target: 0.5)' with lines lc rgb 'royalblue' lw 2, \\\n");
-    fprintf(plot_pipe, "     '-' title 'Weighted Coin (Target: 0.75)' with lines lc rgb 'crimson' lw 2\n");
+    // Plotting as lines to show convergence
+    fprintf(gnuplot, "plot '-' title 'Fair Coin (Exp: 0.5)' with lines lc rgb 'blue', \\\n");
+    fprintf(gnuplot, "     '-' title 'Biased Coin (Exp: 0.75)' with lines lc rgb 'red'\n");
 
-    // Define a step interval to prevent over-plotting and optimize rendering speed
-    int plot_step = 10; 
+    // We plot every 10th step to make the graph render cleanly
+    int step = 10; 
 
-    // Stream the fair coin data points to Gnuplot
-    for (int i = plot_step; i <= total_flips; i += plot_step) {
-        fprintf(plot_pipe, "%d %f\n", i, fair_prob_tracker[i]);
+    // Send Fair Coin Data
+    for (int i = step; i <= max_tosses; i += step) {
+        fprintf(gnuplot, "%d %f\n", i, fair_probs[i]);
     }
-    fprintf(plot_pipe, "e\n");
+    fprintf(gnuplot, "e\n");
 
-    // Stream the weighted coin data points to Gnuplot
-    for (int i = plot_step; i <= total_flips; i += plot_step) {
-        fprintf(plot_pipe, "%d %f\n", i, weighted_prob_tracker[i]);
+    // Send Biased Coin Data
+    for (int i = step; i <= max_tosses; i += step) {
+        fprintf(gnuplot, "%d %f\n", i, biased_probs[i]);
     }
-    fprintf(plot_pipe, "e\n");
+    fprintf(gnuplot, "e\n");
 
-    pclose(plot_pipe);
-    
+    pclose(gnuplot);
     return 0;
 }
